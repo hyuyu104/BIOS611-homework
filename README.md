@@ -213,6 +213,15 @@ Pro tips:
   the `-r` switch to sort descending, and the `-t` switch to select
   the delimiter, which is, in our case, a comma.
 
+```bash
+ > output.txt # clear the file first
+for C in man ls find
+do 
+    echo "$C,$(man $C | wc -l | xargs)" >> output.txt
+done
+sort -g -k 2 -r -t "," < output.txt 
+```
+
  
 ## Problem 10
 
