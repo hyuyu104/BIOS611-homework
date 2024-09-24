@@ -1,0 +1,129 @@
+---
+title: "Homework 3"
+author: "Hongyu Yu"
+output: pdf_document
+---
+
+# BIOS 611 Homework 3
+
+### Question 1
+
+```{r}
+require(tidyverse)
+
+# read in data and print problem
+raw.data <- read_csv("NYC_Dog_Licensing_Dataset_20240918.csv", show_col_types = F)
+pr <- problems(raw.data)
+print(pr)
+
+# rename the columns
+data <- raw.data %>% 
+  rename(
+  name=AnimalName,
+  gender=AnimalGender,
+  birth_year=AnimalBirthYear, 
+  breed=BreedName, 
+  zipcode=ZipCode, 
+  issue_date=LicenseIssuedDate, 
+  expiration_date=LicenseExpiredDate,
+  extract_year=`Extract Year`
+)
+
+# reduce to complete case
+sprintf("%d rows before filtering complete cases", nrow(data))
+data <- data %>% filter(complete.cases(.))
+sprintf("%d rows after filtering complete cases", nrow(data))
+```
+
+### Question 2
+
+By sorting the duplicated rows by their name and the count of their occurrence, we found that not all duplicated rows corresponds to dog names. Instead, some rows have dog names denoted by a ".", and other rows have names "UNKNOWN", "NAME NOT PROVIDED", and "NAME".
+
+```{r}
+distinct.data <- data %>% distinct()
+write_csv(distinct.data, "distinct_data.csv")
+sprintf("%d distinct rows", nrow(distinct.data))
+# extract duplicated rows
+duplicated <- data %>% group_by_all() %>% filter(n() > 1) %>% distinct()
+print(duplicated)
+name.count <- duplicated %>%
+  group_by(name) %>%
+  summarise(n=n())
+print(name.count[1:5,])
+print(arrange(name.count, desc(n))[1:5,])
+```
+
+### Question 3
+
+For the second plot, only years with at least 20 dogs are plotted.
+
+```{r}
+ggplot(distinct.data, aes(birth_year)) + geom_histogram(stat="count") +
+  labs(x="Birth year", y="Dog count", title="All year dog count")
+ggsave("dog_count_all.pdf")
+
+nontrivial.years <- distinct.data %>% 
+  group_by(birth_year) %>%
+  summarise(count=n()) %>%
+  filter(count > 20)
+distinct.data %>% 
+  filter(birth_year %in% nontrivial.years$birth_year) %>%
+  ggplot(aes(birth_year)) + geom_histogram(stat="count") + 
+  labs(x="Birth year", y="Dog count", title="Nontrivial year dog count")
+ggsave("dog_count_nontrivial.pdf")
+```
+
+### Question 4
+
+```{r}
+sprintf("%d rows before filtered by name, gender, birth year, breed, and zip code",
+        nrow(distinct.data))
+unique.data <- distinct.data %>%
+  distinct(name, gender, birth_year, breed, zipcode)
+sprintf("%d rows after filtered by name, gender, birth year, breed, and zip code",
+        nrow(unique.data))
+write_csv(unique.data, "unique.csv")
+```
+
+### Question 5
+
+There are two dog names with the same rate for 1999, which are BUDDY and MAX. The most popular dog name in 2023 is LUNA after removing ., NONE, NAME, NAME NOT PROVIDED, and UNKNOWN.
+
+```{r}
+dogs.by.year <- unique.data %>%
+  group_by(birth_year) %>%
+  summarise(count=n())
+
+dogs.by.year.name <- unique.data %>%
+  group_by(birth_year, name) %>%
+  summarise(name_count=n(), .groups = "drop")
+
+joined.count <- dogs.by.year %>% 
+  right_join(dogs.by.year.name, by=c("birth_year")) %>%
+  mutate(rate=name_count/count)
+
+df.1999 <- joined.count[joined.count$birth_year==1999,]
+max.rate.1999 <- df.1999$name[df.1999$rate==max(df.1999$rate)]
+cat("The most popular dog names in 1999 are/is:", 
+    paste(max.rate.1999, collapse = ", "))
+
+df.2023 <- joined.count[joined.count$birth_year==2023,]
+df.2023 <- df.2023[!(df.2023$name %in% 
+                       c("NAME", "UNKNOWN", "NAME NOT PROVIDED", "NONE", ".")),]
+max.rate.2023 <- df.2023$name[df.2023$rate==max(df.2023$rate)]
+cat("The most popular dog names in 2023 are/is:", 
+    paste(max.rate.2023, collapse = ", "))
+```
+
+### Question 6
+
+```{r}
+joined.count %>% 
+  filter(name %in% c(max.rate.1999, max.rate.2023)) %>%
+  ggplot(aes(x=birth_year, y=rate)) +
+  facet_wrap(~name) +
+  geom_bar(stat="identity") + 
+  labs(x="Birth year", y="Rate")
+ggsave("max_name.pdf")
+```
+
