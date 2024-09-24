@@ -5,6 +5,7 @@ clean:
 	rm *.pdf
 	rm distinct_data.csv
 	rm unique.csv
+	rm deduplicated.csv
 
 distinct_data.csv: preprocess.r
 	Rscript preprocess.r

@@ -26,8 +26,7 @@ cat("The most popular dog names in 2023 are/is:",
 
 joined.count %>% 
   filter(name %in% c(max.rate.1999, max.rate.2023)) %>%
-  ggplot(aes(x=birth_year, y=rate)) +
-  facet_wrap(~name) +
-  geom_bar(stat="identity") + 
+  ggplot(aes(x=birth_year, y=rate, color=name)) +
+  geom_line() + 
   labs(x="Birth year", y="Rate")
 ggsave("max_name.pdf")
