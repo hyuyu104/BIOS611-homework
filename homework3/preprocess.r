@@ -24,15 +24,18 @@ data <- data %>% filter(complete.cases(.))
 sprintf("%d rows after filtering complete cases", nrow(data))
 
 
-
 distinct.data <- data %>% distinct()
 write_csv(distinct.data, "distinct_data.csv")
-sprintf("%d distinct rows", nrow(distinct.data))
+cat(sprintf("%d distinct rows", nrow(distinct.data)))
 # extract duplicated rows
 duplicated <- data %>% group_by_all() %>% filter(n() > 1) %>% distinct()
 print(duplicated)
 name.count <- duplicated %>%
   group_by(name) %>%
   summarise(n=n())
-print(name.count[1:5,])
-print(arrange(name.count, desc(n))[1:5,])
+print(name.count[1:20,])
+print(arrange(name.count, desc(n))[1:20,])
+
+deduplicated <- distinct.data %>%
+  filter(! name %in% c(".", "UNKNOWN", "NAME NOT PROVIDED", "NAME", "NONE")) %>%
+  write_csv("deduplicated.csv")

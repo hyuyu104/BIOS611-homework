@@ -30,27 +30,31 @@ data <- raw.data %>%
 )
 
 # reduce to complete case
-sprintf("%d rows before filtering complete cases", nrow(data))
+cat(sprintf("%d rows before filtering complete cases", nrow(data)))
 data <- data %>% filter(complete.cases(.))
-sprintf("%d rows after filtering complete cases", nrow(data))
+cat(sprintf("%d rows after filtering complete cases", nrow(data)))
 ```
 
 ### Question 2
 
-By sorting the duplicated rows by their name and the count of their occurrence, we found that not all duplicated rows corresponds to dog names. Instead, some rows have dog names denoted by a ".", and other rows have names "UNKNOWN", "NAME NOT PROVIDED", and "NAME".
+By sorting the duplicated rows by their name and the count of their occurrence, we found that not all duplicated rows corresponds to dog names. Instead, some rows have dog names denoted by a ".", and other rows have names "UNKNOWN", "NAME NOT PROVIDED", "NAME", and "NONE". Drop those rows and save the cleaned data.
 
 ```{r}
 distinct.data <- data %>% distinct()
 write_csv(distinct.data, "distinct_data.csv")
-sprintf("%d distinct rows", nrow(distinct.data))
+cat(sprintf("%d distinct rows", nrow(distinct.data)))
 # extract duplicated rows
 duplicated <- data %>% group_by_all() %>% filter(n() > 1) %>% distinct()
 print(duplicated)
 name.count <- duplicated %>%
   group_by(name) %>%
   summarise(n=n())
-print(name.count[1:5,])
-print(arrange(name.count, desc(n))[1:5,])
+print(name.count[1:20,])
+print(arrange(name.count, desc(n))[1:20,])
+
+deduplicated <- distinct.data %>%
+  filter(! name %in% c(".", "UNKNOWN", "NAME NOT PROVIDED", "NAME", "NONE")) %>%
+  write_csv("deduplicated.csv")
 ```
 
 ### Question 3
@@ -58,15 +62,15 @@ print(arrange(name.count, desc(n))[1:5,])
 For the second plot, only years with at least 20 dogs are plotted.
 
 ```{r}
-ggplot(distinct.data, aes(birth_year)) + geom_histogram(stat="count") +
+ggplot(deduplicated, aes(birth_year)) + geom_histogram(stat="count") +
   labs(x="Birth year", y="Dog count", title="All year dog count")
 ggsave("dog_count_all.pdf")
 
-nontrivial.years <- distinct.data %>% 
+nontrivial.years <- deduplicated %>% 
   group_by(birth_year) %>%
   summarise(count=n()) %>%
   filter(count > 20)
-distinct.data %>% 
+deduplicated %>% 
   filter(birth_year %in% nontrivial.years$birth_year) %>%
   ggplot(aes(birth_year)) + geom_histogram(stat="count") + 
   labs(x="Birth year", y="Dog count", title="Nontrivial year dog count")
@@ -77,8 +81,8 @@ ggsave("dog_count_nontrivial.pdf")
 
 ```{r}
 sprintf("%d rows before filtered by name, gender, birth year, breed, and zip code",
-        nrow(distinct.data))
-unique.data <- distinct.data %>%
+        nrow(deduplicated))
+unique.data <- deduplicated %>%
   distinct(name, gender, birth_year, breed, zipcode)
 sprintf("%d rows after filtered by name, gender, birth year, breed, and zip code",
         nrow(unique.data))
@@ -108,8 +112,6 @@ cat("The most popular dog names in 1999 are/is:",
     paste(max.rate.1999, collapse = ", "))
 
 df.2023 <- joined.count[joined.count$birth_year==2023,]
-df.2023 <- df.2023[!(df.2023$name %in% 
-                       c("NAME", "UNKNOWN", "NAME NOT PROVIDED", "NONE", ".")),]
 max.rate.2023 <- df.2023$name[df.2023$rate==max(df.2023$rate)]
 cat("The most popular dog names in 2023 are/is:", 
     paste(max.rate.2023, collapse = ", "))

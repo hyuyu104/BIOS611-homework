@@ -20,8 +20,6 @@ cat("The most popular dog names in 1999 are/is:",
     paste(max.rate.1999, collapse = ", "))
 
 df.2023 <- joined.count[joined.count$birth_year==2023,]
-df.2023 <- df.2023[!(df.2023$name %in% 
-                       c("NAME", "UNKNOWN", "NAME NOT PROVIDED", "NONE", ".")),]
 max.rate.2023 <- df.2023$name[df.2023$rate==max(df.2023$rate)]
 cat("The most popular dog names in 2023 are/is:", 
     paste(max.rate.2023, collapse = ", "))
