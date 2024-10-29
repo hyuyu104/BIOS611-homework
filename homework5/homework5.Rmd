@@ -1,0 +1,166 @@
+---
+title: "Homework 5"
+author: "Hongyu Yu"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+require(tidyverse)
+reticulate::use_python("/opt/miniconda3/bin/python")
+```
+
+### Question 1: explain what the code does
+
+`md5_hash`: returns a unique code for each url page fetched.
+
+`cache_path`: returns a unique path for each url by calling the `md5_hash` function.
+
+`fetch_raw`: use the `requests` module to fetch webpage content of a given url. Will return the text on the webpage if the request is successful (status code is 200); otherwise will return None. To avoid overcrowding the server with too many simultaneous requests, each request is randomly delayed for 6 to 12 seconds.
+
+`fetch`: for a given url, first check whether it is already downloaded before with file name given by `md5_hash(url)`. If so, will read from the saved file and return a `BS` object. Otherwise, will call the `fetch_raw` function to obtain the contents and return a `BS` object.
+
+`episode_list_urls`: get all the individual urls from the webpage [http://www.chakoteya.net/NextGen/episodes.htm](http://www.chakoteya.net/NextGen/episodes.htm).
+
+`tokenize_and_count`: process the text by 1) removing punctuation and downcasing, 2) tokenize the text using the `word_tokenize` function from `nltk`, 3) remove `stop_words` defined by `nltk`, and 4) count the word frequencies in the filtered tokens.
+
+`get_text_of_episodes`: download texts from each url returned by `episode_list_urls` and append it to a Python list. Each list element is a dictionary with two attributes: url and text.
+
+`get_word_counts_for_episodes`: the input `episode` is from `get_text_of_episodes`. For each dictionary in `episode`, call the `tokenize_and_count` function to process the text and append the word count to a new dictionary, with key being the corresponding url.
+
+`get_total_word_count`: count the presence of each word in all episodes. Achieved by updating the `Counter` object with word counts of each episode.
+
+`convert_to_word_count_vectors`: for word counts from an episode webpage, convert it to a vector, with the ith entry corresponding to the number of presence of the word `filtered_words[i]`.
+
+`write_word_counts_to_csv`: write the vector for each url into a csv file. Each row corresponds to a url.
+
+### Question 2: visualize the data
+
+a. showing a histogram of the word counts over the entire ouvre from largest to smallest or to some appropriate small number
+
+```{r}
+data <- read_csv("episode_word_counts.csv")
+
+l <- data %>% pivot_longer(cols=captains:devron) %>%
+  group_by(name) %>% summarise(total=sum(value))
+
+l <- l %>%
+  mutate(name = factor(name, l %>% arrange(desc(total)) %>% pull(name)))
+
+l %>% filter(total > 1000) %>%
+  ggplot(aes(name, total)) + geom_col() + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+b. plot reduced dimensionality version of this data set (eg, PCA)
+
+```{r}
+X <- data %>% select(-`Episode URL`) %>% as.matrix()
+pca <- prcomp(X, center = T, retx = T)
+pca.x <- pca$x
+pca.df <- pca.x[,1:2] %>% as.data.frame()
+pca.df %>% ggplot(aes(PC1, PC2)) + geom_point()
+```
+
+c. color code the data points by find for each vector the character name which occurs most often (picard, riker, data, troi, worf, crusher) and provide insightful commentary if possible.
+
+
+```{r}
+max.chr <- data %>% pivot_longer(cols=captains:devron) %>%
+  group_by(`Episode URL`) %>% summarise(
+    max.idx = which.max(value),
+    max.name = name[which.max(value)]
+  )
+
+# Showing all max charater name
+pca.chr <- cbind(max.chr, pca.df)
+pca.chr %>% ggplot(aes(PC1, PC2, color=max.name)) + geom_point()
+
+chr.count <- max.chr %>% group_by(max.name) %>% 
+  tally() %>% arrange(desc(n))
+chr.count
+```
+Some most popular words are picard, data, riker, worf, and crusher. The first PC can distinguish episodes by the word picard, and the second PC is mostly dominated by the word data as shown below.
+```{r}
+target.chr <- chr.count %>% filter(max.name != "picard")
+max.chr.single <- cbind(max.chr %>% mutate(max.name=ifelse(
+  max.name %in% target.chr$max.name, "OTHERS", max.name)))
+cbind(max.chr.single, pca.df) %>% 
+  ggplot(aes(PC1, PC2, color=max.name)) + geom_point()
+
+target.chr <- chr.count %>% filter(max.name != "data")
+max.chr.single <- cbind(max.chr %>% mutate(max.name=ifelse(
+  max.name %in% target.chr$max.name, "OTHERS", max.name)))
+cbind(max.chr.single, pca.df) %>% 
+  ggplot(aes(PC1, PC2, color=max.name)) + geom_point()
+```
+
+### Question 3: cluster the data
+
+```{r}
+# Set the number of clusters as the number of most often words presented in at least two episodes.
+nclu <- nrow(chr.count %>% filter(n > 1))
+pca.chr$cluster <- factor(kmeans(X, centers = nclu)$cluster)
+pca.chr %>% ggplot(aes(PC1, PC2, color=cluster)) + geom_point()
+```
+
+### Question 4
+
+```{r}
+stds <- data %>%
+  summarise(across(captains:devron, sd)) %>%
+  pivot_longer(captains:devron) %>%
+  rename(std=value) %>%
+  arrange(desc(std)) %>%
+  mutate(name = factor(name, name)) %>%
+  mutate(rank = 1:nrow(.)) %>% 
+  mutate(type="full")
+
+pcs <- pca.x %>% as_tibble() %>% 
+  mutate(across(PC71:PC176, ~ 0)) %>% as.matrix()
+truncated_stds <- pca$rotation %*% pcs %>% t() %>% as_tibble() %>%
+  summarise(across(captains:devron, sd)) %>%
+  pivot_longer(captains:devron) %>% 
+  arrange(desc(value)) %>%
+  rename(std=value) %>%
+  mutate(name = factor(name, name)) %>% 
+  mutate(rank=1:nrow(.)) %>%
+  mutate(type="truncated")
+
+std_df <- rbind(stds %>% mutate(type="full"), truncated_stds %>% mutate(type="truncated"))
+
+ggplot(std_df, aes(rank, std)) + 
+  geom_segment(aes(x=rank+ifelse(type=="truncated", 0.25, 0), xend=rank, y=0, yend=std, color=factor(type))) + xlim(0, 100) + geom_text(aes(label=name, y=std+2), angle=-90)
+```
+
+```{r}
+truncated_stds %>% mutate(type="truncated") %>% filter(type=="truncated" & rank <= 70) %>% pull(name)
+
+d_shrunk <- data %>% select(all_of(truncated_stds %>% mutate(type="truncated") %>% filter(type=="truncated" & rank <= 70) %>% pull(name))) %>% mutate(first_half=(row_number() < max(row_number())/2)*1)
+
+library(gbm)
+train_ii <- runif(nrow(d_shrunk)) < 0.75
+train <- d_shrunk %>% filter(train_ii)
+test <- d_shrunk %>% filter(!train_ii)
+model <- gbm(first_half ~ ., data = train)
+summary(model)
+
+predicted_part <- predict(model, newdata = test, type = "response")
+predicted_part
+```
+
+```{r}
+roc.obj <- pROC::roc(test$first_half, predicted_part)
+plot(roc.obj)
+roc.obj
+```
+
+### Question 5: load the data into python
+5. Load the data into a pandas data frame. Count the rows. Calculate the row sum for the data set's numerical columns. Remove rows with less than 100 total counts. Write the data back out.
+
+```{python}
+import pandas as pd
+df = pd.read_csv("episode_word_counts.csv")
+print(f"the data contains {len(df)} rows")
+df[df.iloc[:,1:].sum(axis=1) >= 100].to_csv("episode_word_counts_cleaned.csv", index=False)
+```
+
